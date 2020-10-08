@@ -1688,10 +1688,11 @@ int dump_one_reg_file(int lfd, u32 id, const struct fd_parms *p)
 	if (mi == NULL) {
 		pr_err("Can't lookup mount=%d for fd=%d path=%s\n",
 			p->mnt_id, p->fd, link->name + 1);
-		return -1;
+		if (!opts.ignore_fd_unknown_mounts)
+			return -1;
 	}
 
-	if (mnt_is_overmounted(mi)) {
+	if (mi != NULL && mnt_is_overmounted(mi)) {
 		pr_err("Open files on overmounted mounts are not supported yet\n");
 		return -1;
 	}
@@ -1712,7 +1713,7 @@ int dump_one_reg_file(int lfd, u32 id, const struct fd_parms *p)
 		return -1;
 	}
 
-	if (check_path_remap(link, p, lfd, id, mi->nsid))
+	if (mi != NULL && check_path_remap(link, p, lfd, id, mi->nsid))
 		return -1;
 	rfe.name	= &link->name[1];
 ext:

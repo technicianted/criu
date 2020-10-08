@@ -357,6 +357,8 @@ usage:
 "                        this requires running a second instance of criu\n"
 "                        in lazy-pages mode: 'criu lazy-pages -D DIR'\n"
 "                        --lazy-pages and lazy-pages mode require userfaultfd\n"
+"  --ignore-unknown-fd-mounts ignore any file descriptors on unknown mount IDs\n"
+"                             useful to bypass overlay2\n"
 "  --stream              dump/restore images using criu-image-streamer\n"
 "\n"
 "* External resources support:\n"

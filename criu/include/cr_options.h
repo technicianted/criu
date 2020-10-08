@@ -174,6 +174,8 @@ struct cr_options {
 
 	/* This stores which method to use for file validation. */
 	int 			file_validation_method;
+
+	int          ignore_fd_unknown_mounts;
 };
 
 extern struct cr_options opts;
