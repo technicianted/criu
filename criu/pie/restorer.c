@@ -4,6 +4,7 @@
 #include <linux/securebits.h>
 #include <linux/capability.h>
 #include <linux/aio_abi.h>
+#include <linux/membarrier.h>
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/file.h>
@@ -628,6 +629,15 @@ long __export_restore_thread(struct thread_restore_args *args)
 	ret = ret || restore_pdeath_sig(args);
 	if (ret)
 		BUG();
+
+	if (args->ta->register_membarrier_private_expedited) {
+		pr_info("restoring membarrier expedited registration\n");
+		ret = sys_membarrier(MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED, 0);
+		if (ret != 0) 
+			pr_err("failed to MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED: %d\n", ret);
+		else 
+			pr_info("successfully MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED\n");
+	}
 
 	restore_finish_stage(task_entries_local, CR_STATE_RESTORE_CREDS);
 

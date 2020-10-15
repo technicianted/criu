@@ -901,6 +901,8 @@ static int restore_one_alive_task(int pid, CoreEntry *core)
 
 	memzero(ta, args_len);
 
+	ta->register_membarrier_private_expedited = opts.membarrier_register_expedited;
+
 	if (prepare_fds(current))
 		return -1;
 
