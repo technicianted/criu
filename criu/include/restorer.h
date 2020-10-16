@@ -223,6 +223,7 @@ struct task_restore_args {
 	int				child_subreaper;
 	bool				has_clone3_set_tid;
 	int             register_membarrier_private_expedited;  /* do membarrier(MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED) on behalf of thread */
+	int             mmap_pages;  /* restore memory by mmaping not reading */
 } __aligned(64);
 
 /*

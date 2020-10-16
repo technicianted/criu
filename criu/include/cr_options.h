@@ -177,6 +177,7 @@ struct cr_options {
 
 	int         ignore_fd_unknown_mounts;
 	int         membarrier_register_expedited;
+	int         mmap_pages;
 };
 
 extern struct cr_options opts;
