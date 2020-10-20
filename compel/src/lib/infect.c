@@ -530,7 +530,7 @@ static int parasite_trap(struct parasite_ctl *ctl, pid_t pid,
 		pr_debug("** delivering signal %d si_code=%d\n",
 			 siginfo.si_signo, siginfo.si_code);
 
-		pr_err("Unexpected %d task interruption, aborting\n", pid);
+		pr_err("Unexpected %d task interruption: signal: %d, si_code: %d, aborting\n", pid, siginfo.si_signo, siginfo.si_code);
 		goto err;
 	}
 
