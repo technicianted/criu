@@ -775,6 +775,8 @@ static int restore_aio_ring(struct rst_aio_ring *raio)
 
 	new = (struct aio_ring *)ctx;
 	i = (raio->len - sizeof(struct aio_ring)) / sizeof(struct io_event);
+	pr_debug("aio ring: magic=%x header_length=%d head=%x tail=%x head=%x req=%x old_nr=%x new_nr=%x expect=%x\n",
+		ring->magic, ring->header_length, ring->head, tail, head, raio->nr_req, ring->nr, new->nr, i);
 	if (tail >= ring->nr || head >= ring->nr || ring->nr != i ||
 	    new->nr != ring->nr) {
 		pr_err("wrong aio: tail=%x head=%x req=%x old_nr=%x new_nr=%x expect=%x\n",
@@ -1422,6 +1424,7 @@ long __export_restore_task(struct task_restore_args *args)
 	rt_sigaction_t act;
 	bool has_vdso_proxy;
 	unsigned long image_offset = 0;
+	struct timespec ts;
 
 	bootstrap_start = args->bootstrap_start;
 	bootstrap_len	= args->bootstrap_len;
@@ -1689,6 +1692,11 @@ long __export_restore_task(struct task_restore_args *args)
 			     vma_entry_len(vma_entry),
 			     vma_entry->prot);
 	}
+
+	pr_info("at the spot, sleeeeeeeeeeeping\n");
+	ts.tv_sec = 1000;
+	ts.tv_nsec = 0;
+	sys_nanosleep(&ts, NULL);
 
 	/*
 	 * Now when all VMAs are in their places time to set
