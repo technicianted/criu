@@ -1606,6 +1606,9 @@ long __export_restore_task(struct task_restore_args *args)
 				int prot	= vma_entry->prot;
 				int flags	= (vma_entry->flags | MAP_FIXED) & ~MAP_ANONYMOUS;
 
+				if (k > 0 && args->vmas[k].start <= args->vmas[k-1].start) {
+					pr_err("unexpected order: %"PRIx64" <= %"PRIx64" at k=%d", args->vmas[k].start, args->vmas[k-1].start, k);
+				}
 				if (range_overlaps(
 						vma_entry->start, vma_entry->end,
 						encode_pointer(iov->iov_base), encode_pointer(iov->iov_base) + iov->iov_len,
