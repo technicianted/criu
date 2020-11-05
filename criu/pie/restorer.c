@@ -1424,7 +1424,6 @@ long __export_restore_task(struct task_restore_args *args)
 	rt_sigaction_t act;
 	bool has_vdso_proxy;
 	unsigned long image_offset = 0;
-	struct timespec ts;
 
 	bootstrap_start = args->bootstrap_start;
 	bootstrap_len	= args->bootstrap_len;
@@ -1660,6 +1659,7 @@ long __export_restore_task(struct task_restore_args *args)
 		}
 
 		rio = ((void *)rio) + RIO_SIZE(rio->nr_iovs);
+		image_offset = rio->off;
 	}
 
 	if (args->vma_ios_fd != -1)
@@ -1695,11 +1695,6 @@ long __export_restore_task(struct task_restore_args *args)
 			     vma_entry_len(vma_entry),
 			     vma_entry->prot);
 	}
-
-	pr_info("at the spot, sleeeeeeeeeeeping\n");
-	ts.tv_sec = 1000;
-	ts.tv_nsec = 0;
-	sys_nanosleep(&ts, NULL);
 
 	/*
 	 * Now when all VMAs are in their places time to set

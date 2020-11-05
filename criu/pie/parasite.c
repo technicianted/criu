@@ -541,6 +541,15 @@ static int parasite_check_aios(struct parasite_check_aios_args *args)
 			return -1;
 		}
 
+		pr_debug("Valid ring #%d\n", i);
+		pr_debug(" `- magic %x\n", ring->magic);
+		pr_debug(" `- cf    %d\n", ring->compat_features);
+		pr_debug(" `- if    %d\n", ring->incompat_features);
+		pr_debug(" `- header size  %d (%zd)\n", ring->header_length, sizeof(struct aio_ring));
+		pr_debug(" `- nr    %x\n", ring->nr);
+		pr_debug(" `- head  %x\n", ring->head);
+		pr_debug(" `- tail  %x\n", ring->tail);
+
 		/* XXX: wait aio completion */
 	}
 
