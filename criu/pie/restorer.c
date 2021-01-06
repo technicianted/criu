@@ -727,8 +727,9 @@ static unsigned long restore_mapping(VmaEntry *vma_entry)
 	 * that mechanism as it causes the process to be charged for memory
 	 * immediately upon mmap, not later upon preadv().
 	 */
-	pr_debug("\tmmap(%"PRIx64" -> %"PRIx64", %x %x %d)\n",
+	pr_debug("\tmmap(%"PRIx64" .. %"PRIx64" len=%lx, prot=%x, flags=%x, fd=%d)\n",
 			vma_entry->start, vma_entry->end,
+			vma_entry_len(vma_entry),
 			prot, flags, (int)vma_entry->fd);
 	/*
 	 * Should map memory here. Note we map them as
@@ -1390,6 +1391,15 @@ int cleanup_current_inotify_events(struct task_restore_args *task_args)
 	return 0;
 }
 
+bool range_overlaps(unsigned long a_start, unsigned long a_end,
+                    unsigned long b_start, unsigned long b_end,
+					unsigned long *o_start, unsigned long *o_end, unsigned long *o_len) {
+    *o_start = max(a_start, b_start);
+    *o_end = min(a_end, b_end);
+	*o_len = *o_end - *o_start;
+	return *o_start < *o_end;
+}
+
 /*
  * The main routine to restore task via sigreturn.
  * This one is very special, we never return there
@@ -1411,6 +1421,7 @@ long __export_restore_task(struct task_restore_args *args)
 	pid_t my_pid = sys_getpid();
 	rt_sigaction_t act;
 	bool has_vdso_proxy;
+	unsigned long image_offset = 0;
 
 	bootstrap_start = args->bootstrap_start;
 	bootstrap_len	= args->bootstrap_len;
@@ -1571,45 +1582,82 @@ long __export_restore_task(struct task_restore_args *args)
 		struct iovec *iovs = rio->iovs;
 		int nr = rio->nr_iovs;
 		ssize_t r;
+		int j;
+		for (j=0; j<nr; j++) {
+			struct iovec *iov = iovs + j;
+			int k;
+			long covered_len = 0;
+			pr_info("\n");
+			pr_info("*** Handling iov#%d -> %lx .. %lx len=%lx, image_offset = %lx\n",
+				j,
+				encode_pointer(iov->iov_base),
+				encode_pointer(iov->iov_base) + iov->iov_len,
+				iov->iov_len,
+				image_offset
+			);
+			for (k = 0; k < args->vmas_n; k++) {
+				VmaEntry* vma_entry = args->vmas + k;
+				unsigned long overlap_start;
+				unsigned long overlap_end;
+				unsigned long overlap_len;
+				int prot	= vma_entry->prot;
+				int flags	= (vma_entry->flags | MAP_FIXED) & ~MAP_ANONYMOUS;
 
-		while (nr) {
-			pr_debug("Preadv %lx:%d... (%d iovs)\n",
-					(unsigned long)iovs->iov_base,
-					(int)iovs->iov_len, nr);
-			r = sys_preadv(args->vma_ios_fd, iovs, nr, rio->off);
-			if (r < 0) {
-				pr_err("Can't read pages data (%d)\n", (int)r);
+				if (k > 0 && args->vmas[k].start <= args->vmas[k-1].start) {
+					pr_err("unexpected order: %"PRIx64" <= %"PRIx64" at k=%d", args->vmas[k].start, args->vmas[k-1].start, k);
+				}
+				if (range_overlaps(
+						vma_entry->start, vma_entry->end,
+						encode_pointer(iov->iov_base), encode_pointer(iov->iov_base) + iov->iov_len,
+						&overlap_start, &overlap_end, &overlap_len)) {
+					pr_info("    Overlaps with VMA: %lx .. %lx len=%lx, flags=%x.\n",
+						vma_entry->start, vma_entry->end, vma_entry_len(vma_entry), vma_entry->flags);
+					pr_info("         overlap area: %lx .. %lx len=%lx.\n",
+						overlap_start, overlap_end, overlap_len);
+					covered_len += overlap_len;
+					if (args->mmap_pages
+					    && (vma_entry->flags&MAP_PRIVATE) == MAP_PRIVATE 
+						&& overlap_start < 0x7ff000000000 // HACK to do not touch special memory regions
+					) {
+						pr_info("                 *mmap(%"PRIx64" .. %"PRIx64" len=%lx, prot=%x, flags=%x, fd=%d, offset=%lx)\n",
+								overlap_start, overlap_end,
+								overlap_len,
+								prot, flags,
+								args->vma_ios_fd,
+								image_offset);
+						ret = sys_mmap(decode_pointer(overlap_start),
+								overlap_len,
+								prot, flags,
+								args->vma_ios_fd,
+								image_offset);
+						pr_info("                   => %lx\n", ret);
+						if (ret != overlap_start) {
+					 		pr_err("Can't mmap (%lx)\n", ret);
+					 		goto core_restore_end;
+						}
+					} else {
+						// Reading from file
+						pr_info("                 *pread64(fd=%d, ubuf=%"PRIx64", count=%lx, pos=%lx)\n",
+							args->vma_ios_fd, overlap_start, overlap_len, image_offset);
+						r = sys_pread(args->vma_ios_fd, decode_pointer(overlap_start), overlap_len, image_offset);
+						pr_info("                   => %ld\n", r);
+						if (r != overlap_len) {
+					 		pr_err("Can't read pages data (%ld)\n", r);
+							goto core_restore_end;
+						}
+					}
+					image_offset += overlap_len;
+				}
+			}
+			if (covered_len != iov->iov_len) {
+				pr_err("Can't find vma entries to cover vma_ios[%d]->iovs[%d], covered=%lx, expected=%lx\n",
+						i, j, covered_len, iov->iov_len);
 				goto core_restore_end;
 			}
-
-			pr_debug("`- returned %ld\n", (long)r);
-			/* If the file is open for writing, then it means we should punch holes
-			 * in it. */
-			if (r > 0 && args->auto_dedup) {
-				int fr = sys_fallocate(args->vma_ios_fd, FALLOC_FL_KEEP_SIZE|FALLOC_FL_PUNCH_HOLE,
-					rio->off, r);
-				if (fr < 0) {
-					pr_debug("Failed to punch holes with fallocate: %d\n", fr);
-				}
-			}
-			rio->off += r;
-			/* Advance the iovecs */
-			do {
-				if (iovs->iov_len <= r) {
-					pr_debug("   `- skip pagemap\n");
-					r -= iovs->iov_len;
-					iovs++;
-					nr--;
-					continue;
-				}
-
-				iovs->iov_base += r;
-				iovs->iov_len -= r;
-				break;
-			} while (nr > 0);
 		}
 
 		rio = ((void *)rio) + RIO_SIZE(rio->nr_iovs);
+		image_offset = rio->off;
 	}
 
 	if (args->vma_ios_fd != -1)
