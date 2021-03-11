@@ -1422,6 +1422,7 @@ long __export_restore_task(struct task_restore_args *args)
 	rt_sigaction_t act;
 	bool has_vdso_proxy;
 	unsigned long image_offset = 0;
+	unsigned long mmap_address_limit = 0xffffffffffffff00;
 
 	bootstrap_start = args->bootstrap_start;
 	bootstrap_len	= args->bootstrap_len;
@@ -1614,10 +1615,14 @@ long __export_restore_task(struct task_restore_args *args)
 						vma_entry->start, vma_entry->end, vma_entry_len(vma_entry), vma_entry->flags);
 					pr_info("         overlap area: %lx .. %lx len=%lx.\n",
 						overlap_start, overlap_end, overlap_len);
+					pr_info("         mmap_address_limit: %lx\n", mmap_address_limit);
 					covered_len += overlap_len;
+					if ((vma_entry->flags&MAP_GROWSDOWN) == MAP_GROWSDOWN) {
+						mmap_address_limit = overlap_start;
+					}
 					if (args->mmap_pages
 					    && (vma_entry->flags&MAP_PRIVATE) == MAP_PRIVATE 
-						&& overlap_start < 0x7ff000000000 // HACK to do not touch special memory regions
+						&& overlap_start < mmap_address_limit
 					) {
 						pr_info("                 *mmap(%"PRIx64" .. %"PRIx64" len=%lx, prot=%x, flags=%x, fd=%d, offset=%lx)\n",
 								overlap_start, overlap_end,
